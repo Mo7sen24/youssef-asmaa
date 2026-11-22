@@ -420,6 +420,14 @@ html:not(.on) #page{visibility:hidden}
 #doorTxt{animation:none;opacity:0;transition:opacity 1.2s ease}
 #doorTxt.show{opacity:1}
 #doorTxt.out{opacity:0!important}
+
+/* auto-scroll toggle */
+#asBtn{position:fixed;z-index:60;left:calc(16px + env(safe-area-inset-left,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));width:48px;height:48px;border-radius:50%;border:1px solid var(--card-line);background:var(--card);color:var(--gold);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;box-shadow:0 4px 14px rgba(60,40,10,.28);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);-webkit-tap-highlight-color:transparent;opacity:0;visibility:hidden;transform:scale(.8);transition:opacity .8s,transform .8s,visibility 0s .8s}
+html.on #asBtn{opacity:1;visibility:visible;transform:none;transition:opacity .8s,transform .8s,visibility 0s}
+#asBtn svg{width:20px;height:20px;fill:currentColor}
+#asBtn .ic-play{display:none}
+#asBtn.paused .ic-play{display:block}
+#asBtn.paused .ic-pause{display:none}
 </style></head><body>
 <div class="stage">
  <img id="door" alt="اضغط للبدء" role="button" tabindex="0" src="door.webp">
@@ -915,4 +923,59 @@ req();
 })();
 </script>
 <script>(function(){var v=document.getElementById("hallVid");if(!v)return;v.muted=true;v.loop=true;var p=v.play();if(p&&p.catch)p.catch(function(){});if("IntersectionObserver" in window){new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){var q=v.play();if(q&&q.catch)q.catch(function(){})}else v.pause()})},{threshold:.2}).observe(v)}})();</script>
+
+<button id="asBtn" type="button" aria-label="إيقاف التمرير التلقائي" title="إيقاف / تشغيل التمرير التلقائي">
+ <svg class="ic-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+ <svg class="ic-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>
+</button>
+<script>
+(function(){
+var btn=document.getElementById('asBtn');if(!btn)return;
+var root=document.documentElement;
+var SPEED=45;            /* px per second - raise for faster, lower for slower */
+var START_DELAY=1800;    /* ms to wait after the invitation opens */
+var RESUME_DELAY=2200;   /* ms of no touching before auto-scroll continues */
+var want=true,hold=false,running=false,started=false,pos=0,last=0,lastSet=0,holdT=0,raf=0;
+function maxY(){return Math.max(0,root.scrollHeight-window.innerHeight)}
+function setUI(){
+  btn.classList.toggle('paused',!want);
+  btn.setAttribute('aria-label',want?'إيقاف التمرير التلقائي':'تشغيل التمرير التلقائي')}
+function frame(t){
+  raf=0;if(!want||hold){running=false;return}
+  var dt=last?Math.min(t-last,50):16.7;last=t;
+  var cur=window.scrollY||root.scrollTop||0;
+  if(Math.abs(cur-lastSet)>1.5)pos=cur;     /* user moved the page: continue from there */
+  pos+=SPEED*dt/1000;
+  var m=maxY();
+  if(pos>=m-1){window.scrollTo(0,m);want=false;running=false;setUI();return}
+  window.scrollTo(0,pos);lastSet=window.scrollY||pos;
+  raf=requestAnimationFrame(frame)}
+function run(){
+  if(running||!want||hold||!started)return;
+  running=true;last=0;pos=window.scrollY||0;lastSet=pos;
+  raf=requestAnimationFrame(frame)}
+function halt(){running=false;if(raf){cancelAnimationFrame(raf);raf=0}}
+btn.addEventListener('click',function(){
+  if(want){want=false;halt()}
+  else{
+    want=true;
+    if(maxY()-(window.scrollY||0)<4)window.scrollTo(0,0);   /* finished before: start over */
+    run()}
+  setUI()});
+/* pause while the guest is touching / wheeling, then continue */
+function grab(){if(!want)return;hold=true;halt();clearTimeout(holdT)}
+function release(d){clearTimeout(holdT);holdT=setTimeout(function(){hold=false;run()},d)}
+addEventListener('touchstart',function(e){if(e.target.closest&&e.target.closest('#asBtn'))return;grab()},{passive:true});
+addEventListener('touchend',function(){if(hold)release(RESUME_DELAY)},{passive:true});
+addEventListener('touchcancel',function(){if(hold)release(RESUME_DELAY)},{passive:true});
+addEventListener('wheel',function(){grab();release(RESUME_DELAY)},{passive:true});
+addEventListener('keydown',function(e){if(/^(ArrowUp|ArrowDown|PageUp|PageDown|Home|End| )$/.test(e.key)){grab();release(RESUME_DELAY)}});
+document.addEventListener('visibilitychange',function(){if(document.hidden)halt();else run()});
+/* begin once the invitation has opened (the page unlocks scrolling by adding .on) */
+function begin(){if(started)return;started=true;setTimeout(run,START_DELAY)}
+if(root.classList.contains('on'))begin();
+else new MutationObserver(function(m,o){if(root.classList.contains('on')){o.disconnect();begin()}}).observe(root,{attributes:true,attributeFilter:['class']});
+setUI();
+})();
+</script>
 </body></html>
